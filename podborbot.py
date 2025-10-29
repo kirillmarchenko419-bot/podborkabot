@@ -1,17 +1,17 @@
 import logging
 from telegram import (
-    Update, 
-    ReplyKeyboardMarkup, 
+    Update,
+    ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
     KeyboardButton
 )
 from telegram.ext import (
-    Application, 
-    CommandHandler, 
-    MessageHandler, 
-    filters, 
-    ContextTypes, 
-    ConversationHandler
+    Application,
+    CommandHandler,
+    MessageHandler,
+    filters,
+    ContextTypes,
+    ConversationHandler,
 )
 import sqlite3
 
@@ -32,7 +32,7 @@ LOCATION, DISTRICT, BUDGET, ROOMS, TYPE, CONTACT = range(6)
 # Актуальные цены по Краснодару
 KRASNODAR_PRICES = {
     'studio': '3-4 млн ₽',
-    '1_room': '4.5-6 млн ₽', 
+    '1_room': '4.5-6 млн ₽',
     '2_rooms': '6-8 млн ₽',
     '3_rooms': '8-12 млн ₽',
     'new_building': 'от 120 тыс ₽/м²',
@@ -130,7 +130,7 @@ def get_contact_keyboard():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     user_id = user.id
-    # Сохраняем пользователя
+    # сохраняем пользователя
     conn = sqlite3.connect('krasnodar_real_estate.db')
     cursor = conn.cursor()
     cursor.execute(
@@ -215,7 +215,7 @@ async def rooms(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def property_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['property_type'] = update.message.text
 
-    # Сохраняем заявку
+    # сохраняем заявку
     user = update.message.from_user
     user_id = user.id
     user_data = context.user_data
@@ -240,7 +240,7 @@ async def property_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.commit()
     conn.close()
 
-    # Вывод сводки
+    # отправляем сводку
     summary = (
         "✅ *Ваша заявка сохранена!*\n"
         f"Ваши параметры:\n"
@@ -263,7 +263,7 @@ async def property_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return CONTACT
 
-# Обработка контакта/телефона и завершение
+# Обработка контакта или номера для связи
 async def contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.contact:
         phone = update.message.contact.phone_number
@@ -272,7 +272,7 @@ async def contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     user_id = user.id
 
-    # Обновляем заявку с телефоном
+    # обновляем заявку с телефоном
     conn = sqlite3.connect('krasnodar_real_estate.db')
     cursor = conn.cursor()
     cursor.execute(
@@ -281,7 +281,7 @@ async def contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     conn.commit()
 
-    # Получаем последнюю заявку этого пользователя
+    # получаем последнюю заявку этого пользователя
     cursor.execute('SELECT * FROM requests WHERE user_id=? AND status="new" ORDER BY created_at DESC LIMIT 1', (user_id,))
     request_data = cursor.fetchone()
     conn.close()
@@ -289,7 +289,7 @@ async def contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if request_data:
         # request_data: (id, user_id, username, first_name, last_name, location, district, budget, rooms, property_type, phone, status, created_at)
         (id, user_id_db, username, first_name, last_name, location, district, budget, rooms, property_type, phone_db, status, created_at) = request_data
-        # Отправка заявки админу
+        # отправляем админу
         await context.bot.send_message(
             chat_id=ADMIN_CHAT_ID,
             text=(
@@ -306,7 +306,7 @@ async def contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown'
         )
 
-    # Отправляем подтверждение пользователю
+    # финальное сообщение с ссылкой на канал
     final_text = (
         "🎉 *Заявка полностью оформлена!*\n\n"
         f"✅ *Ваш телефон:* {phone}\n\n"
@@ -317,7 +317,7 @@ async def contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• Новостройки: {KRASNODAR_PRICES['new_building']}\n"
         f"• Вторичка: {KRASNODAR_PRICES['secondary']}\n\n"
         "*Подписывайтесь на наш канал:*\n"
-        "@arenda_Krasnadar_coub\n\n"
+        "[Подписаться на канал](https://t.me/arenda_Krasnadar_coub)\n\n"
         "*Для нового поиска нажмите /start*"
     )
     await update.message.reply_text(
@@ -351,10 +351,13 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ConversationHandler.END
 
-# Запуск бота
+# Обработчик ошибок
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    print(f"Произошла ошибка: {context.error}")
+
 def main():
-    application = Application.builder().token(BOT_TOKEN).build()
     init_db()
+    application = Application.builder().token(BOT_TOKEN).build()
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
@@ -373,6 +376,8 @@ def main():
 
     application.add_handler(conv_handler)
     application.add_handler(CommandHandler("stats", stats))
+    application.add_error_handler(error_handler)
+
     print("Бот запущен...")
     application.run_polling()
 
